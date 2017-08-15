@@ -40,24 +40,26 @@ static void setup_no2_sensor()
 static void setup_gps_module()
 {
   serial_connection.begin(9600);
-  Serial.println("GPS OK");
+  Serial.println("GPS init OK!");
 }
 
 static void setup_ethernet_module()
 {
   if (!Ethernet.begin(mac_address))
+  {
+    Serial.println("Ethernet configuration with DCHP failed, trying without...");
     Ethernet.begin(mac_address, client_ip);
-  delay(1000);
-  Serial.println("Eth online OK");
+  }
+  delay(1000); // leave 1 second for the Ethernet controller to be online
+  Serial.println("Ethernet online OK");
   if (client.connect(server_ip, SERVER_PORT) == 1)
-    Serial.println("Srv conn OK");
-
+    Serial.println("Connected to the server!");
 }
 
 static void setup_sd_module()
 {
   if (SD.begin(4))
-    Serial.println("SD OK");
+    Serial.println("SD init OK!");
 }
 
 void setup()
@@ -166,7 +168,6 @@ void loop()
   unsigned long current_time = millis();
   if (current_time - previous_time < time_interval)
     return ;
-
   previous_time = current_time;
   
   if (!client.connected() && data_to_send
