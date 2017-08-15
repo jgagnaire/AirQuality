@@ -1,35 +1,32 @@
 
 #include <SD.h>
-
 #include <Ethernet.h>
-#include <EthernetClient.h>
-
-#include <MutichannelGasSensor.h>
 #include <TinyGPS++.h>
+#include <EthernetClient.h>
 #include <SoftwareSerial.h>
+#include <MutichannelGasSensor.h>
 
 static SoftwareSerial serial_connection(2, 3);
 static TinyGPSPlus gps;
 static char mac_address[] = {0xCA, 0xFE, 0xBA, 0xBE, 0xBE, 0xEF};
 static IPAddress client_ip[] = {192, 168, 1, 210}; // if DHCP fails to assign us an IP
 static IPAddress server_ip[] = {192, 168, 1, 69}; // no DNS
-// char server_name[] = "localhost"; // using DNS
-
-#ifdef SERVER_PORT
-# undef SERVER_PORT
-#endif /* !SERVER_PORT */
-
-#define SERVER_PORT 8000
-
+//static char server_name[] = "localhost"; // using DNS
 static EthernetClient client;
 static bool is_online = false;
 static bool data_to_send = false;
 static File datafile;
+static unsigned long previous_time = 0;
+static unsigned long time_interval = 300000; // <=> 5 minutes
+
+#ifdef SERVER_PORT
+# undef SERVER_PORT
+#endif // !SERVER_PORT
+#define SERVER_PORT 8000
 
 #ifdef DATAFILE_NAME
 # undef DATAFILE_NAME
-#endif /* !DATAFILE_NAME */
-
+#endif // !DATAFILE_NAME
 #define DATAFILE_NAME "log.txt"
 
 
@@ -115,7 +112,10 @@ static bool open_datafile()
   {
      datafile = SD.open(DATAFILE_NAME, FILE_WRITE);
      if (!datafile)
+     {
+        Serial.println("Error while opening datafile on MicroSD card");
         return false;
+     }
   }
   return true;
 }
@@ -153,23 +153,30 @@ static bool send_sd_data()
   }
   
   if (!SD.remove(DATAFILE_NAME) || !SD.open(DATAFILE_NAME, FILE_WRITE))
-    datafile.seek(0);
+    {
+      Serial.println("Error while clearing the datafile");
+      datafile.seek(0);
+    }
 
   return true;
 }
 
 void loop()
 {
-  if (!client.connected() && data_to_send)
-  {
-    if (client.connect(server_ip, SERVER_PORT) && send_sd_data())
-      data_to_send = false;
-  }
+  unsigned long current_time = millis();
+  if (current_time - previous_time < time_interval)
+    return ;
+
+  previous_time = current_time;
+  
+  if (!client.connected() && data_to_send
+      && client.connect(server_ip, SERVER_PORT) && send_sd_data())
+        data_to_send = false;
 
   while (serial_connection.available())
     gps.encode(serial_connection.read());
   
-  if (gps.location.isValid() && gas.measure_NO2() >= 0)
+  if (gps.location.isValid())
   {
     if (client.connected())
       send_data();
